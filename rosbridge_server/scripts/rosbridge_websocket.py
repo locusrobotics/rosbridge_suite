@@ -36,7 +36,6 @@ import rospy
 import sys
 
 from socket import error
-
 from tornado.ioloop import IOLoop
 from tornado.ioloop import PeriodicCallback
 from tornado.web import Application
@@ -51,10 +50,20 @@ from rosbridge_library.capabilities.unadvertise_service import UnadvertiseServic
 from rosbridge_library.capabilities.call_service import CallService
 
 
+
+
 def shutdown_hook():
     IOLoop.instance().stop()
 
 if __name__ == "__main__":
+
+    # TODO: for manually testing what version we're running.
+    import tornado
+    import twisted
+    raise Exception(twisted.version)
+    raise Exception(tornado.version)
+
+
     rospy.init_node("rosbridge_websocket")
     rospy.on_shutdown(shutdown_hook)    # register shutdown hook to stop the server
 
