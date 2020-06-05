@@ -1,0 +1,8 @@
+backports.ssl-match-hostname==3.7.0.1  # via tornado
+certifi==2020.4.5.1       # via tornado
+tornado==4.2.1            # via -r /home/ablakey/locus_dev/src/rosbridge_suite/rosbridge_server/requirements.in
+twisted==16.0.0           # via -r /home/ablakey/locus_dev/src/rosbridge_suite/rosbridge_server/requirements.in
+zope.interface==5.1.0     # via twisted
+
+# The following packages are considered to be unsafe in a requirements file:
+# setuptools

@@ -1,11 +1,17 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(rosbridge_server)
 
-find_package(catkin REQUIRED)
-
-catkin_python_setup()
+find_package(catkin REQUIRED COMPONENTS
+  catkin_virtualenv
+)
 
 catkin_package()
+
+catkin_generate_virtualenv(
+  INPUT_REQUIREMENTS requirements.in
+)
+
+catkin_python_setup()
 
 install(PROGRAMS
   scripts/rosbridge_websocket.py
