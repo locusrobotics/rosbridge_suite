@@ -54,14 +54,6 @@ def shutdown_hook():
     IOLoop.instance().stop()
 
 if __name__ == "__main__":
-
-    # TODO: for manually testing what version we're running.
-    import tornado
-    import twisted
-    raise Exception(tornado.version)
-    raise Exception(twisted.version)
-
-
     rospy.init_node("rosbridge_websocket")
     rospy.on_shutdown(shutdown_hook)    # register shutdown hook to stop the server
 
