@@ -13,7 +13,7 @@ catkin_generate_virtualenv(
 
 catkin_python_setup()
 
-install(PROGRAMS
+catkin_install_python(PROGRAMS
   scripts/rosbridge_websocket.py
   scripts/rosbridge_websocket
   scripts/rosbridge_tcp.py
@@ -24,6 +24,7 @@ install(PROGRAMS
 )
 
 install(FILES
+  requirements.txt
   launch/rosbridge_websocket.launch
   launch/rosbridge_tcp.launch
   launch/rosbridge_udp.launch
