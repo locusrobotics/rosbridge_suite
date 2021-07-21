@@ -18,7 +18,7 @@
 
   <build_depend>catkin_virtualenv</build_depend>
 
-  <exec_depend>python-backports.ssl-match-hostname</exec_depend>
+  <!--exec_depend>python-backports.ssl-match-hostname</exec_depend-->
   <!-- <exec_depend>python-tornado</exec_depend> -->
   <!-- <exec_depend>python-twisted-core</exec_depend> -->
   <exec_depend>rosbridge_library</exec_depend>
