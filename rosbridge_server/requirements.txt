@@ -1,5 +1,6 @@
 backports.ssl-match-hostname==3.7.0.1  # via tornado
 certifi==2021.5.30        # via tornado
+pillow==6.2.2             # via -r requirements.in
 pymongo==3.6.1            # via -r requirements.in
 tornado==4.2.1            # via -r requirements.in
 twisted==16.0.0           # via -r requirements.in

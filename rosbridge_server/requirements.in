@@ -1,3 +1,4 @@
 tornado==4.2.1
 Twisted==16.0.0
 pymongo==3.6.1  # for bson
+pillow==6.2.2  # to fix weird issue where pillow isn't being installed in python2.
