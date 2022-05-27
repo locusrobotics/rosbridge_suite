@@ -39,7 +39,7 @@ from functools import wraps
 
 import rospy
 from autobahn.twisted.websocket import WebSocketServerProtocol
-from rosauth.srv import Authentication
+from locus_msgs.srv import LiveViewAuth, LiveViewAuthResponse
 from rosbridge_library.rosbridge_protocol import RosbridgeProtocol
 from rosbridge_library.util import bson, json
 from twisted.internet import interfaces, reactor
@@ -153,6 +153,12 @@ class OutgoingValve:
 
 
 class RosbridgeWebSocket(WebSocketServerProtocol):
+    """
+    A server implementation of the RosBridge WebSocket protocol.
+    Note that this class is instantiated for each user, so for per-user details, we can store them on the instance.
+    But if we want "global" state, we need to save it on `cls.`
+    """
+
     client_id_seed = 0
     clients_connected = 0
     authenticate = False
@@ -184,6 +190,7 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
             producer.resumeProducing()
             self.protocol.outgoing = producer.relay
             self.authenticated = False
+            self.permissions = []
             cls.client_id_seed += 1
             cls.clients_connected += 1
             self.client_id = uuid.uuid4()
@@ -199,41 +206,19 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
 
     def onMessage(self, message, binary):
         cls = self.__class__
+        if cls.bson_only_mode:
+            msg = bson.BSON(message).decode()
+        else:
+            msg = json.loads(message)
+
         if not binary:
             message = message.decode("utf-8")
-        # check if we need to authenticate
-        if cls.authenticate and not self.authenticated:
-            try:
-                if cls.bson_only_mode:
-                    msg = bson.BSON(message).decode()
-                else:
-                    msg = json.loads(message)
 
-                if msg["op"] == "auth":
-                    # check the authorization information
-                    auth_srv = rospy.ServiceProxy("authenticate", Authentication)
-                    resp = auth_srv(
-                        msg["mac"],
-                        msg["client"],
-                        msg["dest"],
-                        msg["rand"],
-                        rospy.Time(msg["t"]),
-                        msg["level"],
-                        rospy.Time(msg["end"]),
-                    )
-                    self.authenticated = resp.authenticated
-                    if self.authenticated:
-                        rospy.loginfo("Client %d has authenticated.", self.protocol.client_id)
-                        return
-                # if we are here, no valid authentication was given
-                rospy.logwarn("Client %d did not authenticate. Closing connection.", self.protocol.client_id)
-                self.sendClose()
-            except:
-                # proper error will be handled in the protocol class
-                self.incoming_queue.push(message)
+        # Authenticate? This could be called even if user is authenticated. It resets auth state.
+        if cls.authenticate and msg["op"] == "authenticate":
+            self.authenticate(msg)
         else:
-            # no authentication required
-            self.incoming_queue.push(message)
+            self.incoming_queue.push(message)  # push the non-decoded message data.
 
     def outgoing(self, message):
         if type(message) == bson.BSON:
@@ -259,3 +244,63 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
         rospy.loginfo("Client disconnected. %d clients total.", cls.clients_connected)
 
         self.incoming_queue.finish()
+
+    def authenticate(self, msg):
+        # Reset auth state regardless of user being authenticated or not. This means that repeated `authenticate` ops
+        # will re-authenticate.
+        self.authenticated = False
+        self.permissions = []
+
+        # Call the service for auth with the username and password.
+        auth_srv = rospy.ServiceProxy(rospy.get_param("auth_service_name"), LiveViewAuth)
+        response = auth_srv(msg["username"], msg["password"])
+
+        # An internal error. Handle it locally and close the connection. This needs to be fixed, not handled.
+        if response.result == LiveViewAuthResponse.FAILURE:
+            reason = f"Could not auth user: {msg['username']}. Service failed with message: {response.message}"
+            message = json.dumps(
+                {
+                    "op": "authorization_response",
+                    "username": msg["username"],
+                    "message": reason,
+                    "status": "failure",
+                    "permissions": [],
+                }
+            )
+            rospy.logerr(reason)
+            self.sendMessage(message.encode("utf-8"), isBinary=False)
+            self.sendClose()
+            return
+
+        # A 403-like error. Tell the client of this failure and then close connection.
+        if response.result == LiveViewAuthResponse.INVALID_CREDENTIALS:
+            reason = f"Invalid credentials for user: {msg['username']}. Reason: {response.message}"
+            message = json.dumps(
+                {
+                    "op": "authorization_response",
+                    "username": msg["username"],
+                    "message": reason,
+                    "status": "invalidCredentials",
+                    "permissions": [],
+                }
+            )
+            rospy.logwarn(reason)
+            self.sendMessage(message.encode("utf-8"), isBinary=False)
+            self.sendClose()
+            return
+
+        # Auth worked. Set RosBridge state for authed/permissions, and send a response.
+        if response.result == LiveViewAuthResponse.SUCCESS:
+            message = json.dumps(
+                {
+                    "op": "authorization_response",
+                    "username": msg["username"],
+                    "message": "",
+                    "status": "success",
+                    "permissions": response.permissions,
+                }
+            )
+            self.authenticated = True
+            self.permissions = response.permissions
+            rospy.loginfo(f"Authenticated user: {msg['username']}")
+            self.sendMessage(message.encode("utf-8"), isBinary=False)
