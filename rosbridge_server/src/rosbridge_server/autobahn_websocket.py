@@ -30,6 +30,7 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+import re
 import sys
 import threading
 import traceback
@@ -39,7 +40,7 @@ from functools import wraps
 
 import rospy
 from autobahn.twisted.websocket import WebSocketServerProtocol
-from locus_msgs.srv import LiveViewAuth, LiveViewAuthResponse
+from locus_msgs.srv import GetLiveViewAuth, GetLiveViewAuthResponse
 from rosbridge_library.rosbridge_protocol import RosbridgeProtocol
 from rosbridge_library.util import bson, json
 from twisted.internet import interfaces, reactor
@@ -204,6 +205,8 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
         rospy.loginfo("Client connected.  %d clients total.", cls.clients_connected)
 
     def onMessage(self, message, binary):
+        rospy.logerr(sys.version_info)
+        rospy.logerr(sys.version)
         cls = self.__class__
         if cls.bson_only_mode:
             msg = bson.BSON(message).decode()
@@ -253,11 +256,11 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
         # Call the service for auth with the username and password.
         if self.auth_service_name is None:
             raise RuntimeError("rosparam `auth_service_name` not set.")
-        auth_srv = rospy.ServiceProxy(self.auth_service_name, LiveViewAuth)
+        auth_srv = rospy.ServiceProxy(self.auth_service_name, GetLiveViewAuth)
         response = auth_srv(msg["username"], msg["password"])
 
         # An internal error. Handle it locally and close the connection. This needs to be fixed, not handled.
-        if response.result == LiveViewAuthResponse.FAILURE:
+        if response.result == GetLiveViewAuthResponse.FAILURE:
             reason = f"Could not auth user: {msg['username']}. Service failed with message: {response.message}"
             message = json.dumps(
                 {
@@ -274,7 +277,7 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
             return
 
         # A 403-like error. Tell the client of this failure and then close connection.
-        if response.result == LiveViewAuthResponse.INVALID_CREDENTIALS:
+        if response.result == GetLiveViewAuthResponse.INVALID_CREDENTIALS:
             reason = f"Invalid credentials for user: {msg['username']}. Reason: {response.message}"
             message = json.dumps(
                 {
@@ -291,7 +294,7 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
             return
 
         # Auth worked. Set RosBridge state for authed/permissions, and send a response.
-        if response.result == LiveViewAuthResponse.SUCCESS:
+        if response.result == GetLiveViewAuthResponse.SUCCESS:
             message = json.dumps(
                 {
                     "op": "authorization_response",
@@ -305,3 +308,26 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
             self.permissions = response.permissions
             rospy.loginfo(f"Authenticated user: {msg['username']}")
             self.sendMessage(message.encode("utf-8"), isBinary=False)
+
+        def parse_permission(self, permission_string: str):
+            """Returns an op, resource_path tuple.
+            This assumes that the permission_string is of format:  `op,resource/path.  Examples:
+            - `subscribe,/robot_names`
+            - `publish,/path/to/teleop`
+            - `call_service,/explode_robot`
+            """
+            pattern = fr"""
+            ^                                # Must begin with
+            [subscribe|publish|call_service] # a specific operation
+            ,                                # with a comma separating
+            [a-z|A-Z|~|\/]                   # a valid ROS resource name that begins with a letter, tilde, or slash
+            [0-9|a-z|A-Z|_|\/]+              # and has any number of numbers, letters, underscores, and slashes
+            $                                # with nothing else after.
+            """
+            if not re.match(pattern, permission_string):
+                raise ValueError(f"permission_string: {permission_string} is not in the valid format.")
+
+            return permission_string
+
+        def has_permission(self, op, resource_path):
+            """Returns True or False if the given RosBridge `op` for a given resource path is valid."""
