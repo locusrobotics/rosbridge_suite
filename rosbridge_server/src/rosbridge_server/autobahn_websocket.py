@@ -162,6 +162,7 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
     client_id_seed = 0
     clients_connected = 0
     authenticate = False
+    auth_service_name = None
 
     # The following are passed on to RosbridgeProtocol
     # defragmentation.py:
@@ -201,8 +202,6 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
         except Exception as exc:
             rospy.logerr("Unable to accept incoming connection.  Reason: %s", str(exc))
         rospy.loginfo("Client connected.  %d clients total.", cls.clients_connected)
-        if cls.authenticate:
-            rospy.loginfo("Awaiting proper authentication...")
 
     def onMessage(self, message, binary):
         cls = self.__class__
@@ -216,7 +215,7 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
 
         # Authenticate? This could be called even if user is authenticated. It resets auth state.
         if cls.authenticate and msg["op"] == "authenticate":
-            self.authenticate(msg)
+            self.authenticateUser(msg)
         else:
             self.incoming_queue.push(message)  # push the non-decoded message data.
 
@@ -245,14 +244,16 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
 
         self.incoming_queue.finish()
 
-    def authenticate(self, msg):
+    def authenticateUser(self, msg):
         # Reset auth state regardless of user being authenticated or not. This means that repeated `authenticate` ops
         # will re-authenticate.
         self.authenticated = False
         self.permissions = []
 
         # Call the service for auth with the username and password.
-        auth_srv = rospy.ServiceProxy(rospy.get_param("auth_service_name"), LiveViewAuth)
+        if self.auth_service_name is None:
+            raise RuntimeError("rosparam `auth_service_name` not set.")
+        auth_srv = rospy.ServiceProxy(self.auth_service_name, LiveViewAuth)
         response = auth_srv(msg["username"], msg["password"])
 
         # An internal error. Handle it locally and close the connection. This needs to be fixed, not handled.

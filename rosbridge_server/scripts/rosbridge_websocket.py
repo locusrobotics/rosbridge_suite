@@ -32,29 +32,29 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from __future__ import print_function
-import rospy
-import sys
 
-from twisted.python import log
+import sys
+from distutils.version import LooseVersion
+
+import autobahn  # to check version
+import rospy
+from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
+from autobahn.websocket.compress import PerMessageDeflateOffer, PerMessageDeflateOfferAccept
 from twisted.internet import reactor, ssl
 from twisted.internet.error import CannotListenError, ReactorNotRunning
-from distutils.version import LooseVersion
-import autobahn #to check version
-from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
-from autobahn.websocket.compress import (PerMessageDeflateOffer,
-                                         PerMessageDeflateOfferAccept)
+from twisted.python import log
+
 log.startLogging(sys.stdout)
 
+from rosbridge_library.capabilities.advertise import Advertise
+from rosbridge_library.capabilities.advertise_service import AdvertiseService
+from rosbridge_library.capabilities.call_service import CallService
+from rosbridge_library.capabilities.publish import Publish
+from rosbridge_library.capabilities.subscribe import Subscribe
+from rosbridge_library.capabilities.unadvertise_service import UnadvertiseService
 from rosbridge_server import ClientManager
 from rosbridge_server.autobahn_websocket import RosbridgeWebSocket
 from rosbridge_server.util import get_ephemeral_port
-
-from rosbridge_library.capabilities.advertise import Advertise
-from rosbridge_library.capabilities.publish import Publish
-from rosbridge_library.capabilities.subscribe import Subscribe
-from rosbridge_library.capabilities.advertise_service import AdvertiseService
-from rosbridge_library.capabilities.unadvertise_service import UnadvertiseService
-from rosbridge_library.capabilities.call_service import CallService
 
 
 def shutdown_hook():
@@ -97,6 +97,7 @@ if __name__ == "__main__":
     keyfile = rospy.get_param('~keyfile', None)
     # if authentication should be used
     RosbridgeWebSocket.authenticate = rospy.get_param('~authenticate', False)
+    RosbridgeWebSocket.auth_service_name = rospy.get_param('~auth_service_name', None)
     port = rospy.get_param('~port', 9090)
     address = rospy.get_param('~address', "0.0.0.0")
 
