@@ -170,7 +170,7 @@ def parsePermission(permissionString: str) -> Tuple[str, str]:
     [0-9|a-z|A-Z|_|\/]+)              # and has any number of numbers, letters, underscores, and slashes
     $                                 # with nothing else after.
     """
-    result = re.search(pattern, permissionString)
+    result = re.search(pattern, permissionString, re.VERBOSE)
     if not result:
         raise ValueError(f"permissionString: {permissionString} is not in the valid format.")
     return (result.group(1), result.group(2))
@@ -248,18 +248,20 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
         else:
             msg = json.loads(message)
 
+        if msg["op"] == "authenticate":
+            if self.isAuthenticated:
+                self.sendStatus("Cannot call op `authenticate` when user is already authenticated.", "error")
+            else:
+                self.authenticateUser(msg)
+            return
+
         op = msg["op"]
         resourcePath = msg.get("topic", msg.get("service"))  # The resource path for pub/sub/callservice.
 
-        # if op is None or resourcePath is None:
-        # TODO
-
-        if msg["op"] == "authenticate":
-            self.authenticateUser(msg)
-        elif (op, resourcePath) in self.permissions:
+        if (op, resourcePath) in self.permissions:
             self.incoming_queue.push(message)  # push the non-decoded message data.
         else:
-            reason = f"User {self.username} lacks permission for op: {op}, resource: {resourcePath}"
+            reason = f"User: {self.username} lacks permission for op: {op}, resource: {resourcePath}"
             self.sendStatus(reason, "error")
 
     def sendStatus(self, message: str, level: str):
@@ -318,6 +320,11 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
         if self.auth_service_name is None:
             raise RuntimeError("rosparam `auth_service_name` not set.")
         auth_srv = rospy.ServiceProxy(self.auth_service_name, GetLiveViewAuth)
+
+        if "token" not in msg:
+            self.sendStatus("Message is malformed. Must include `token`.", "error")
+            return
+
         response = auth_srv(msg["token"])
 
         # An internal error. Handle it locally and close the connection. This needs to be fixed, not handled.
@@ -330,7 +337,7 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
         # A 403-like error. Tell the client of this failure and then close connection.
         if response.result == GetLiveViewAuthResponse.INVALID_CREDENTIALS:
             reason = f"Invalid credentials. Reason: {response.message}"
-            self.sendStatus(reason, "warning")
+            self.sendStatus(reason, "error")
             return
 
         # Auth worked. Set RosBridge state for authed/permissions, and send a response.
@@ -340,12 +347,13 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
                     "op": "authentication_response",
                     "username": response.username,
                     "msg": "",
-                    "status": "success",
                     "permissions": response.permissions,
                 }
             )
             self.isAuthenticated = True
             self.permissions = {parsePermission(p) for p in response.permissions}
             self.username = response.username
-            rospy.loginfo(f"Authenticated user: {response.username} with permissions: {self.permissions}")
+
+            permissionsString = "".join(sorted([f"\n  - {p[0]}: {p[1]}" for p in self.permissions]))
+            rospy.loginfo(f"Authenticated user: {response.username} with permissions:{permissionsString}")
             self.outgoing(message)
