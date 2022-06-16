@@ -258,10 +258,11 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
         op = msg["op"]
         resourcePath = msg.get("topic", msg.get("service"))  # The resource path for pub/sub/callservice.
 
-        if (op, resourcePath) in self.permissions:
+        # Do not require any permissions to unsubscribe from something.
+        if (op, resourcePath) in self.permissions or op == "unsubscribe":
             self.incoming_queue.push(message)  # push the non-decoded message data.
         else:
-            reason = f"User: {self.username} lacks permission for op: {op}, resource: {resourcePath}"
+            reason = f"{self.username} lacks permission to {op} to {resourcePath}"
             self.sendStatus(reason, "error")
 
     def sendStatus(self, message: str, level: str):
