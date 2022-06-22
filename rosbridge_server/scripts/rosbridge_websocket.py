@@ -32,29 +32,29 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from __future__ import print_function
-
-import sys
-from distutils.version import LooseVersion
-
-import autobahn  # to check version
 import rospy
-from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
-from autobahn.websocket.compress import PerMessageDeflateOffer, PerMessageDeflateOfferAccept
+import sys
+
+from twisted.python import log
 from twisted.internet import reactor, ssl
 from twisted.internet.error import CannotListenError, ReactorNotRunning
-from twisted.python import log
-
+from distutils.version import LooseVersion
+import autobahn #to check version
+from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
+from autobahn.websocket.compress import (PerMessageDeflateOffer,
+                                         PerMessageDeflateOfferAccept)
 log.startLogging(sys.stdout)
 
-from rosbridge_library.capabilities.advertise import Advertise
-from rosbridge_library.capabilities.advertise_service import AdvertiseService
-from rosbridge_library.capabilities.call_service import CallService
-from rosbridge_library.capabilities.publish import Publish
-from rosbridge_library.capabilities.subscribe import Subscribe
-from rosbridge_library.capabilities.unadvertise_service import UnadvertiseService
 from rosbridge_server import ClientManager
 from rosbridge_server.autobahn_websocket import RosbridgeWebSocket
 from rosbridge_server.util import get_ephemeral_port
+
+from rosbridge_library.capabilities.advertise import Advertise
+from rosbridge_library.capabilities.publish import Publish
+from rosbridge_library.capabilities.subscribe import Subscribe
+from rosbridge_library.capabilities.advertise_service import AdvertiseService
+from rosbridge_library.capabilities.unadvertise_service import UnadvertiseService
+from rosbridge_library.capabilities.call_service import CallService
 
 
 def shutdown_hook():
