@@ -48,6 +48,22 @@ from rosbridge_library.util import bson, json
 from twisted.internet import interfaces, reactor
 from zope.interface import implementer
 
+rosResourcePattern = fr"""
+(\/[0-9|a-z]+_[0-9]+)?            # Might have a robot path (eg. p3_123 or r2_12354)
+([a-z|A-Z|~|\/]                   # a valid ROS resource name that begins with a letter, tilde, or slash,
+[0-9|a-z|A-Z|_|\/]+)              # and has any number of numbers, letters, underscores, and slashes.
+"""
+
+
+fleetAdminPermissionPattern = fr"""
+^                                 # Must begin with
+(subscribe|publish|call_service)  # a specific operation
+,                                 # with a comma separating
+(\/{{robot}})?                    # that might begin with /{robot} (two braces to escape f-string pattern.)
+{rosResourcePattern}              # and has a valid ROS resource
+$                                 # with nothing else after.
+"""
+
 
 def _log_exception():
     """Log the most recent exception to ROS."""
@@ -162,18 +178,10 @@ def parsePermission(permissionString: str) -> Tuple[str, str]:
     - `publish,/path/to/teleop`
     - `call_service,/explode_robot`
     """
-    pattern = fr"""
-    ^                                 # Must begin with
-    (subscribe|publish|call_service)  # a specific operation
-    ,                                 # with a comma separating
-    ([a-z|A-Z|~|\/]                   # a valid ROS resource name that begins with a letter, tilde, or slash
-    [0-9|a-z|A-Z|_|\/]+)              # and has any number of numbers, letters, underscores, and slashes
-    $                                 # with nothing else after.
-    """
-    result = re.search(pattern, permissionString, re.VERBOSE)
+    result = re.search(fleetAdminPermissionPattern, permissionString, re.VERBOSE)
     if not result:
         raise ValueError(f"permissionString: {permissionString} is not in the valid format.")
-    return (result.group(1), result.group(2))
+    return (result.group(1), result.group(3))
 
 
 class RosbridgeWebSocket(WebSocketServerProtocol):
@@ -259,7 +267,7 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
         resourcePath = msg.get("topic", msg.get("service"))  # The resource path for pub/sub/callservice.
 
         # Do not require any permissions to unsubscribe from something.
-        if (op, resourcePath) in self.permissions or op == "unsubscribe":
+        if self.hasPermission(op, resourcePath):
             self.incoming_queue.push(message)  # push the non-decoded message data.
         else:
             reason = f"{self.username} lacks permission to {op} to {resourcePath}"
@@ -358,3 +366,24 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
             permissionsString = "".join(sorted([f"\n  - {p[0]}: {p[1]}" for p in self.permissions]))
             rospy.loginfo(f"Authenticated user: {response.username} with permissions:{permissionsString}")
             self.outgoing(message)
+
+    def hasPermission(self, op: str, resourcePath: str) -> bool:
+        # All users can always unsubscribe.
+        if op == "unsubscribe":
+            return True
+
+        result = re.search(fr"^{rosResourcePattern}$", resourcePath, re.VERBOSE)
+
+        if not result:
+            return False
+
+        # Group 1 is a robot path so this is a robot resource. We string match against a generic `/{robot}`
+        if result.group(1) is not None:
+            if (op, f"/{{robot}}{result.group(2)}") in self.permissions:
+                return True
+
+        # Group 1 is None, so this is a Wrangler resource.
+        if (op, result.group(2)) in self.permissions:
+            return True
+
+        return False
