@@ -37,8 +37,7 @@ import traceback
 import uuid
 from collections import defaultdict, deque
 from functools import wraps
-from multiprocessing.sharedctypes import Value
-from typing import Tuple
+from typing import Optional, Tuple
 
 import rospy
 from autobahn.twisted.websocket import WebSocketServerProtocol
@@ -46,6 +45,7 @@ from locus_msgs.srv import GetLiveViewAuth, GetLiveViewAuthResponse
 from rosbridge_library.rosbridge_protocol import RosbridgeProtocol
 from rosbridge_library.util import bson, json
 from twisted.internet import interfaces, reactor
+from yaml import parse
 from zope.interface import implementer
 
 
@@ -155,7 +155,7 @@ class OutgoingValve:
         self._valve.set()
 
 
-def parsePermission(permissionString: str) -> Tuple[str, str]:
+def parsePermission(permissionString: str) -> Optional[Tuple[str, str]]:
     """Returns an op, resourcePath structure.
     This assumes that the permissionString is of format:  `op,resource/path.  Examples:
     - `subscribe,/robot_names`
@@ -171,8 +171,11 @@ def parsePermission(permissionString: str) -> Tuple[str, str]:
     $                                 # with nothing else after.
     """
     result = re.search(pattern, permissionString, re.VERBOSE)
+
+    # Is not related to Websocket permissions.  Eg. might be a database permission.
     if not result:
-        raise ValueError(f"permissionString: {permissionString} is not in the valid format.")
+        return None
+
     return (result.group(1), result.group(2))
 
 
@@ -355,10 +358,9 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
             self.username = response.username
 
             for p in response.permissions:
-                op, permission = parsePermission(p)
-                self.permissions[op].add(permission)
-
-            self.permissions = {parsePermission(p) for p in response.permissions}
+                parsedPermission = parsePermission(p)
+                if parsedPermission is not None:
+                    self.permissions[parsedPermission[0]].add(parsedPermission[1])
 
             permissionsString = "".join(sorted([f"\n  - {p[0]}: {p[1]}" for p in self.permissions]))
             rospy.loginfo(f"Authenticated user: {response.username} with permissions:{permissionsString}")
