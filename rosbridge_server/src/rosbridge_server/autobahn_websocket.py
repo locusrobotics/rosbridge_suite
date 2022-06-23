@@ -35,7 +35,7 @@ import sys
 import threading
 import traceback
 import uuid
-from collections import deque
+from collections import defaultdict, deque
 from functools import wraps
 from multiprocessing.sharedctypes import Value
 from typing import Tuple
@@ -47,22 +47,6 @@ from rosbridge_library.rosbridge_protocol import RosbridgeProtocol
 from rosbridge_library.util import bson, json
 from twisted.internet import interfaces, reactor
 from zope.interface import implementer
-
-rosResourcePattern = fr"""
-(\/[0-9|a-z]+_[0-9]+)?            # Might have a robot path (eg. p3_123 or r2_12354)
-([a-z|A-Z|~|\/]                   # a valid ROS resource name that begins with a letter, tilde, or slash,
-[0-9|a-z|A-Z|_|\/]+)              # and has any number of numbers, letters, underscores, and slashes.
-"""
-
-
-fleetAdminPermissionPattern = fr"""
-^                                 # Must begin with
-(subscribe|publish|call_service)  # a specific operation
-,                                 # with a comma separating
-(\/{{robot}})?                    # that might begin with /{robot} (two braces to escape f-string pattern.)
-{rosResourcePattern}              # and has a valid ROS resource
-$                                 # with nothing else after.
-"""
 
 
 def _log_exception():
@@ -178,10 +162,18 @@ def parsePermission(permissionString: str) -> Tuple[str, str]:
     - `publish,/path/to/teleop`
     - `call_service,/explode_robot`
     """
-    result = re.search(fleetAdminPermissionPattern, permissionString, re.VERBOSE)
+    pattern = fr"""
+    ^                                 # Must begin with
+    (subscribe|publish|call_service)  # a specific operation
+    ,                                 # with a comma separating
+    ([a-z|A-Z|~|\/]                   # a valid ROS resource name that begins with a letter, tilde, or slash
+    [0-9|a-z|A-Z|_|\/]+)              # and has any number of numbers, letters, underscores, and slashes
+    $                                 # with nothing else after.
+    """
+    result = re.search(pattern, permissionString, re.VERBOSE)
     if not result:
         raise ValueError(f"permissionString: {permissionString} is not in the valid format.")
-    return (result.group(1), result.group(3))
+    return (result.group(1), result.group(2))
 
 
 class RosbridgeWebSocket(WebSocketServerProtocol):
@@ -224,7 +216,7 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
             self.protocol.outgoing = producer.relay
             self.isAuthenticated = False
             self.username = None  # TODO: populate and clear.
-            self.permissions = set()
+            self.permissions = defaultdict(set)
             cls.client_id_seed += 1
             cls.clients_connected += 1
             self.client_id = uuid.uuid4()
@@ -323,7 +315,7 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
         # will re-authenticate.
         self.isAuthenticated = False
         self.username = None
-        self.permissions = set()
+        self.permissions = defaultdict(set)
 
         # Call the service for auth with the username and password.
         if self.auth_service_name is None:
@@ -360,30 +352,28 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
                 }
             )
             self.isAuthenticated = True
-            self.permissions = {parsePermission(p) for p in response.permissions}
             self.username = response.username
+
+            for p in response.permissions:
+                op, permission = parsePermission(p)
+                self.permissions[op].add(permission)
+
+            self.permissions = {parsePermission(p) for p in response.permissions}
 
             permissionsString = "".join(sorted([f"\n  - {p[0]}: {p[1]}" for p in self.permissions]))
             rospy.loginfo(f"Authenticated user: {response.username} with permissions:{permissionsString}")
             self.outgoing(message)
 
-    def hasPermission(self, op: str, resourcePath: str) -> bool:
-        # All users can always unsubscribe.
-        if op == "unsubscribe":
-            return True
-
-        result = re.search(fr"^{rosResourcePattern}$", resourcePath, re.VERBOSE)
-
-        if not result:
-            return False
-
-        # Group 1 is a robot path so this is a robot resource. We string match against a generic `/{robot}`
-        if result.group(1) is not None:
-            if (op, f"/{{robot}}{result.group(2)}") in self.permissions:
+        def hasPermission(self, op: str, resourcePath: str) -> bool:
+            if op == "unsubscribe":
                 return True
 
-        # Group 1 is None, so this is a Wrangler resource.
-        if (op, result.group(2)) in self.permissions:
-            return True
+            # Walk all permissions for that operation to find a match. We use `endswith` because some resources might
+            # begin with a robot id.  eg.  `/p3_123`,  `/r2_12345`, `v1000`. There is no well-defined schema we can
+            # rely on, so we just compare if most/all of the remaining string is a known permission.
+            # Note that this is of limited security risk given we control both sides of this.
+            for permission in self.permissions[op]:
+                if resourcePath.endswith(permission):
+                    return True
 
-        return False
+            return False
