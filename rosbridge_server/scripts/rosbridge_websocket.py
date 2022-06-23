@@ -97,6 +97,7 @@ if __name__ == "__main__":
     keyfile = rospy.get_param('~keyfile', None)
     # if authentication should be used
     RosbridgeWebSocket.authenticate = rospy.get_param('~authenticate', False)
+    RosbridgeWebSocket.auth_service_name = rospy.get_param('~auth_service_name', None)
     port = rospy.get_param('~port', 9090)
     address = rospy.get_param('~address', "0.0.0.0")
 
