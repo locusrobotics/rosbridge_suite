@@ -2,6 +2,15 @@
 Changelog for package rosbridge_suite
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Small fixes (`#681 <https://github.com/locusrobotics/rosbridge_suite/issues/681>`_)
+  * Remove shebang from setup.py
+  * Use setuptools instead of distutils
+  * Use package_format 3 in all pkgs
+  Including xml-model
+* Contributors: Matthijs van der Burgh
+
 0.11.13 (2020-12-08)
 --------------------
 
