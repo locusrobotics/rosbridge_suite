@@ -5,6 +5,34 @@ Changelog for package rosbridge_library
 Forthcoming
 -----------
 * Update changelogs
+* Update changelogs
+* (library) Remove old melodic test (`#726 <https://github.com/locusrobotics/rosbridge_suite/issues/726>`_)
+  https://github.com/ros/ros_comm/pull/2123, merged by https://github.com/ros/ros_comm/pull/2219 is finally released via APT.
+* Fix bson support for python3 (`#545 <https://github.com/locusrobotics/rosbridge_suite/issues/545>`_)
+  * Use bytearray instead of str for bson data handling
+  * Update rosbridge callback for bson_only_mode
+  * Add error log message when attempting to send None
+* Fix ROS1 CI (`#680 <https://github.com/locusrobotics/rosbridge_suite/issues/680>`_)
+  * (library) More consistancy in tests
+  * (library) use rosunit.unitrun
+  rostest.unitrun was just a deprecated wrapper
+  * (library) restore multipub unregister test from before e0d32339
+  * [TEMP] Debug logging
+  * (library) reinstate old multi unregistering test for melodic
+  This fixes the CI while waiting for a response on https://github.com/ros/ros_comm/issues/2207
+  * (library) cleanup test logging
+  * (actions) set SETUPTOOLS_USE_DISTUTILS=stdlib
+  Hopefully this finds it way into colcon build
+* Small fixes (`#681 <https://github.com/locusrobotics/rosbridge_suite/issues/681>`_)
+  * Remove shebang from setup.py
+  * Use setuptools instead of distutils
+  * Use package_format 3 in all pkgs
+  Including xml-model
+* Check if key exists before accessing the dict in SubscriberManager::unsubscribe(), patches https://github.com/RobotWebTools/rosbridge_suite/issues/580 (`#638 <https://github.com/locusrobotics/rosbridge_suite/issues/638>`_)
+  Co-authored-by: Steve Golton <steve@inovorobotics.com>
+* Contributors: Matthijs van der Burgh, Nick Paul, Steve Golton, ablakey
+
+* Update changelogs
 * (library) Remove old melodic test (`#726 <https://github.com/locusrobotics/rosbridge_suite/issues/726>`_)
   https://github.com/ros/ros_comm/pull/2123, merged by https://github.com/ros/ros_comm/pull/2219 is finally released via APT.
 * Fix bson support for python3 (`#545 <https://github.com/locusrobotics/rosbridge_suite/issues/545>`_)
