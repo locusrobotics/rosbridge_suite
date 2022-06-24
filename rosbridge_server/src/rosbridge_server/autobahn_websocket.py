@@ -366,16 +366,16 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
             rospy.loginfo(f"Authenticated user: {response.username} with permissions:{permissionsString}")
             self.outgoing(message)
 
-        def hasPermission(self, op: str, resourcePath: str) -> bool:
-            if op == "unsubscribe":
+    def hasPermission(self, op: str, resourcePath: str) -> bool:
+        if op == "unsubscribe":
+            return True
+
+        # Walk all permissions for that operation to find a match. We use `endswith` because some resources might
+        # begin with a robot id.  eg.  `/p3_123`,  `/r2_12345`, `v1000`. There is no well-defined schema we can
+        # rely on, so we just compare if most/all of the remaining string is a known permission.
+        # Note that this is of limited security risk given we control both sides of this.
+        for permission in self.permissions[op]:
+            if resourcePath.endswith(permission):
                 return True
 
-            # Walk all permissions for that operation to find a match. We use `endswith` because some resources might
-            # begin with a robot id.  eg.  `/p3_123`,  `/r2_12345`, `v1000`. There is no well-defined schema we can
-            # rely on, so we just compare if most/all of the remaining string is a known permission.
-            # Note that this is of limited security risk given we control both sides of this.
-            for permission in self.permissions[op]:
-                if resourcePath.endswith(permission):
-                    return True
-
-            return False
+        return False
