@@ -4,6 +4,33 @@ Changelog for package rosbridge_server
 
 Forthcoming
 -----------
+* Update changelogs
+* Update missed commit
+* address issues in testing
+* update
+* update
+* revert formatting
+* progress
+* progress
+* progress
+* progress
+* progress implementing
+* progress implementation
+* progress on implementing rosbridge portion.
+* formatting
+* Fix ROS 1 RosbridgeTcpSocket endless loop (`#722 <https://github.com/locusrobotics/rosbridge_suite/issues/722>`_)
+* Fix bson support for python3 (`#545 <https://github.com/locusrobotics/rosbridge_suite/issues/545>`_)
+  * Use bytearray instead of str for bson data handling
+  * Update rosbridge callback for bson_only_mode
+  * Add error log message when attempting to send None
+* Small fixes (`#681 <https://github.com/locusrobotics/rosbridge_suite/issues/681>`_)
+  * Remove shebang from setup.py
+  * Use setuptools instead of distutils
+  * Use package_format 3 in all pkgs
+  Including xml-model
+* (server) remove execution from setup.py (`#679 <https://github.com/locusrobotics/rosbridge_suite/issues/679>`_)
+* Contributors: Matthijs van der Burgh, Nick Paul, ablakey, curiosus42
+
 * Update missed commit
 * address issues in testing
 * update
