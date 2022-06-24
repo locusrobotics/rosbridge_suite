@@ -2,8 +2,8 @@
 Changelog for package rosbridge_server
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.11.14 (2022-06-24)
+--------------------
 * Update changelogs
 * Update changelogs
 * Update missed commit

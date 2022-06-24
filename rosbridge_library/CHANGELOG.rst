@@ -2,8 +2,8 @@
 Changelog for package rosbridge_library
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.11.14 (2022-06-24)
+--------------------
 * Update changelogs
 * Update changelogs
 * (library) Remove old melodic test (`#726 <https://github.com/locusrobotics/rosbridge_suite/issues/726>`_)
