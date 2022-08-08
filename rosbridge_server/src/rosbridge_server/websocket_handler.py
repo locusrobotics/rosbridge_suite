@@ -30,45 +30,42 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-import rospy
-import uuid
-
-from rosauth.srv import Authentication
-
+import re
 import sys
 import threading
 import traceback
-from functools import partial, wraps
+import uuid
 from collections import defaultdict
+from functools import partial, wraps
 from typing import Optional, Tuple
-from yaml import parse
 
-from tornado import version_info as tornado_version_info
-from tornado.ioloop import IOLoop
-from tornado.websocket import WebSocketHandler, WebSocketClosedError
-from tornado.gen import coroutine, BadYieldError
-
-from rosbridge_library.rosbridge_protocol import RosbridgeProtocol
-from rosbridge_library.util import json, bson
-
+import rospy
 from locus_msgs.srv import GetLiveViewAuth, GetLiveViewAuthResponse
+from rosbridge_library.rosbridge_protocol import RosbridgeProtocol
+from rosbridge_library.util import bson, json
+from tornado import version_info as tornado_version_info
+from tornado.gen import BadYieldError, coroutine
+from tornado.ioloop import IOLoop
+from tornado.websocket import WebSocketClosedError, WebSocketHandler
 
 
 def _log_exception():
     """Log the most recent exception to ROS."""
     exc = traceback.format_exception(*sys.exc_info())
-    rospy.logerr(''.join(exc))
+    rospy.logerr("".join(exc))
 
 
 def log_exceptions(f):
     """Decorator for logging exceptions to ROS."""
+
     @wraps(f)
     def wrapper(*args, **kwargs):
         try:
             return f(*args, **kwargs)
-        except:
+        except Exception:
             _log_exception()
             raise
+
     return wrapper
 
 
@@ -105,11 +102,11 @@ class RosbridgeWebSocket(WebSocketHandler):
 
     # The following are passed on to RosbridgeProtocol
     # defragmentation.py:
-    fragment_timeout = 600                  # seconds
+    fragment_timeout = 600  # seconds
     # protocol.py:
-    delay_between_messages = 0              # seconds
-    max_message_size = None                 # bytes
-    unregister_timeout = 10.0               # seconds
+    delay_between_messages = 0  # seconds
+    max_message_size = None  # bytes
+    unregister_timeout = 10.0  # seconds
     bson_only_mode = False
 
     @log_exceptions
@@ -120,7 +117,7 @@ class RosbridgeWebSocket(WebSocketHandler):
             "delay_between_messages": cls.delay_between_messages,
             "max_message_size": cls.max_message_size,
             "unregister_timeout": cls.unregister_timeout,
-            "bson_only_mode": cls.bson_only_mode
+            "bson_only_mode": cls.bson_only_mode,
         }
         try:
             self.protocol = RosbridgeProtocol(cls.client_id_seed, parameters=parameters)
@@ -136,13 +133,15 @@ class RosbridgeWebSocket(WebSocketHandler):
         except Exception as exc:
             rospy.logerr("Unable to accept incoming connection.  Reason: %s", str(exc))
         rospy.loginfo("Client connected.  %d clients total.", cls.clients_connected)
-        if cls.authenticate:
+        if cls.require_authentication:
             rospy.loginfo("Awaiting proper authentication...")
+        else:
+            rospy.loginfo("`require_authentication` is false. Client does not need to auth.")
 
     @log_exceptions
     def on_message(self, message):
         cls = self.__class__
-        if cls.authenticate:
+        if cls.require_authentication:
             self.on_message_with_auth(message)
         else:
             # no authentication required
@@ -176,7 +175,7 @@ class RosbridgeWebSocket(WebSocketHandler):
             with self._write_lock:
                 yield self.write_message(message, binary)
         except WebSocketClosedError:
-            rospy.logwarn('WebSocketClosedError: Tried to write to a closed websocket')
+            rospy.logwarn("WebSocketClosedError: Tried to write to a closed websocket")
             raise
         except BadYieldError:
             # Tornado <4.5.0 doesn't like its own yield and raises BadYieldError.
@@ -216,20 +215,20 @@ class RosbridgeWebSocket(WebSocketHandler):
 
         if msg["op"] == "authenticate":
             if self.isAuthenticated:
-                self.sendStatus("Cannot call op `authenticate` when user is already authenticated.", "error")
+                self.send_status("Cannot call op `authenticate` when user is already authenticated.", "error")
             else:
-                self.authenticateUser(msg)
+                self.authenticate_user(msg)
             return
 
         op = msg["op"]
         resourcePath = msg.get("topic", msg.get("service"))  # The resource path for pub/sub/callservice.
 
         # Do not require any permissions to unsubscribe from something.
-        if self.hasPermission(op, resourcePath):
+        if self.has_permission(op, resourcePath):
             self.incoming_queue.push(message)  # push the non-decoded message data.
         else:
             reason = f"{self.username} lacks permission to {op} to {resourcePath}"
-            self.sendStatus(reason, "error")
+            self.send_status(reason, "error")
 
     def send_status(self, message: str, level: str):
         msg = json.dumps(
@@ -251,7 +250,7 @@ class RosbridgeWebSocket(WebSocketHandler):
 
         self.outgoing(msg)
 
-    def authentica_user(self, msg):
+    def authenticate_user(self, msg):
         # Reset auth state regardless of user being authenticated or not. This means that repeated `authenticate` ops
         # will re-authenticate.
         self.isAuthenticated = False
@@ -264,7 +263,7 @@ class RosbridgeWebSocket(WebSocketHandler):
         auth_srv = rospy.ServiceProxy(self.auth_service_name, GetLiveViewAuth)
 
         if "token" not in msg:
-            self.sendStatus("Message is malformed. Must include `token`.", "error")
+            self.send_status("Message is malformed. Must include `token`.", "error")
             return
 
         response = auth_srv(msg["token"])
@@ -272,14 +271,14 @@ class RosbridgeWebSocket(WebSocketHandler):
         # An internal error. Handle it locally and close the connection. This needs to be fixed, not handled.
         if response.result == GetLiveViewAuthResponse.FAILURE:
             reason = f"Could not auth user: {msg['username']}. Service failed with message: {response.message}"
-            self.sendStatus(reason, "error")
+            self.send_status(reason, "error")
             self.sendClose()
             return
 
         # A 403-like error. Tell the client of this failure and then close connection.
         if response.result == GetLiveViewAuthResponse.INVALID_CREDENTIALS:
             reason = f"Invalid credentials. Reason: {response.message}"
-            self.sendStatus(reason, "error")
+            self.send_status(reason, "error")
             return
 
         # Auth worked. Set RosBridge state for authed/permissions, and send a response.
@@ -304,16 +303,16 @@ class RosbridgeWebSocket(WebSocketHandler):
             rospy.loginfo(f"Authenticated user: {response.username} with permissions:{permissionsString}")
             self.outgoing(message)
 
-        def hasPermission(self, op: str, resourcePath: str) -> bool:
-            if op == "unsubscribe":
+    def has_permission(self, op: str, resourcePath: str) -> bool:
+        if op == "unsubscribe":
+            return True
+
+        # Walk all permissions for that operation to find a match. We use `endswith` because some resources might
+        # begin with a robot id.  eg.  `/p3_123`,  `/r2_12345`, `v1000`. There is no well-defined schema we can
+        # rely on, so we just compare if most/all of the remaining string is a known permission.
+        # Note that this is of limited security risk given we control both sides of this.
+        for permission in self.permissions[op]:
+            if resourcePath.endswith(permission):
                 return True
 
-            # Walk all permissions for that operation to find a match. We use `endswith` because some resources might
-            # begin with a robot id.  eg.  `/p3_123`,  `/r2_12345`, `v1000`. There is no well-defined schema we can
-            # rely on, so we just compare if most/all of the remaining string is a known permission.
-            # Note that this is of limited security risk given we control both sides of this.
-            for permission in self.permissions[op]:
-                if resourcePath.endswith(permission):
-                    return True
-
-            return False
+        return False
