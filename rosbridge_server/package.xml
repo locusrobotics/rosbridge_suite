@@ -26,6 +26,7 @@
   <exec_depend>rosapi</exec_depend>
   <exec_depend>rospy</exec_depend>
   <exec_depend>rosauth</exec_depend>
+  <exec_depend>locus_msgs</exec_depend>
 
   <export>
     <pip_requirements>requirements.txt</pip_requirements>

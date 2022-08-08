@@ -32,22 +32,20 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 from __future__ import print_function
-import rospy
+
 import sys
-
 from socket import error
-from tornado.ioloop import IOLoop
-from tornado.ioloop import PeriodicCallback
-from tornado.web import Application
 
-from rosbridge_server import RosbridgeWebSocket, ClientManager
-
+import rospy
 from rosbridge_library.capabilities.advertise import Advertise
+from rosbridge_library.capabilities.advertise_service import AdvertiseService
+from rosbridge_library.capabilities.call_service import CallService
 from rosbridge_library.capabilities.publish import Publish
 from rosbridge_library.capabilities.subscribe import Subscribe
-from rosbridge_library.capabilities.advertise_service import AdvertiseService
 from rosbridge_library.capabilities.unadvertise_service import UnadvertiseService
-from rosbridge_library.capabilities.call_service import CallService
+from rosbridge_server import ClientManager, RosbridgeWebSocket
+from tornado.ioloop import IOLoop, PeriodicCallback
+from tornado.web import Application
 
 
 def shutdown_hook():
@@ -83,6 +81,7 @@ if __name__ == "__main__":
     keyfile = rospy.get_param('~keyfile', None)
     # if authentication should be used
     RosbridgeWebSocket.authenticate = rospy.get_param('~authenticate', False)
+    RosbridgeWebSocket.auth_service_name = rospy.get_param('~auth_service_name', None)
     port = rospy.get_param('~port', 9090)
     address = rospy.get_param('~address', "")
 
