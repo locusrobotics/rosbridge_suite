@@ -138,13 +138,29 @@ class RosbridgeWebSocket(WebSocketHandler):
         else:
             rospy.loginfo("`require_authentication` is false. Client does not need to auth.")
 
+    @classmethod
+    def decode_message(cls, message):
+        if cls.bson_only_mode:
+            return bson.BSON(message).decode()
+        else:
+            return json.loads(message)
+
     @log_exceptions
     def on_message(self, message):
+        """An incoming message will be handled in one of four cases. Three cases must be handled by the auth system:
+        1. require_authentication is True
+        2. the request is an authentication request (even if auth is not required, we handle it normally).
+        3. the user is authenticated, so it should be handled as such.
+
+        In the final case, all requests are just passed through. This covers when we do not require auth and users
+        do not want to (or cannot because v22 FM doesn't support it).
+        """
         cls = self.__class__
-        if cls.require_authentication:
+        msg = self.decode_message(message)
+
+        if msg["op"] == "authenticate" or cls.require_authentication or self.is_authenticated:
             self.on_message_with_auth(message)
         else:
-            # no authentication required
             self.protocol.incoming(message)
 
     @log_exceptions
@@ -204,17 +220,10 @@ class RosbridgeWebSocket(WebSocketHandler):
 
         return {}
 
-    def on_message_with_auth(self, message):
-        cls = self.__class__
-
-        # Decode message to get op/resource details.
-        if cls.bson_only_mode:
-            msg = bson.BSON(message).decode()
-        else:
-            msg = json.loads(message)
+    def on_message_with_auth(self, msg, message):
 
         if msg["op"] == "authenticate":
-            if self.isAuthenticated:
+            if self.is_authenticated:
                 self.send_status("Cannot call op `authenticate` when user is already authenticated.", "error")
             else:
                 self.authenticate_user(msg)
@@ -253,7 +262,7 @@ class RosbridgeWebSocket(WebSocketHandler):
     def authenticate_user(self, msg):
         # Reset auth state regardless of user being authenticated or not. This means that repeated `authenticate` ops
         # will re-authenticate.
-        self.isAuthenticated = False
+        self.is_authenticated = False
         self.username = None
         self.permissions = defaultdict(set)
 
@@ -291,7 +300,7 @@ class RosbridgeWebSocket(WebSocketHandler):
                     "permissions": response.permissions,
                 }
             )
-            self.isAuthenticated = True
+            self.is_authenticated = True
             self.username = response.username
 
             for p in response.permissions:
