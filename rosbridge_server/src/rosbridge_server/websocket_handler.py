@@ -37,7 +37,6 @@ import traceback
 import uuid
 from collections import defaultdict
 from functools import partial, wraps
-from typing import Optional, Tuple
 
 import rospy
 from locus_msgs.srv import GetLiveViewAuth, GetLiveViewAuthResponse
@@ -69,22 +68,22 @@ def log_exceptions(f):
     return wrapper
 
 
-def parsePermission(permissionString: str) -> Optional[Tuple[str, str]]:
+def parse_permission(permission_string):
     """Returns an op, resourcePath structure.
-    This assumes that the permissionString is of format:  `op,resource/path.  Examples:
+    This assumes that the permission_string is of format:  `op,resource/path.  Examples:
     - `subscribe,/robot_names`
     - `publish,/path/to/teleop`
     - `call_service,/explode_robot`
     """
     pattern = fr"""
-    ^                                 # Must begin with
+    ^fleet_admin.                     # Must begin with
     (subscribe|publish|call_service)  # a specific operation
     ,                                 # with a comma separating
     ([a-z|A-Z|~|\/]                   # a valid ROS resource name that begins with a letter, tilde, or slash
     [0-9|a-z|A-Z|_|\/]+)              # and has any number of numbers, letters, underscores, and slashes
     $                                 # with nothing else after.
     """
-    result = re.search(pattern, permissionString, re.VERBOSE)
+    result = re.search(pattern, permission_string, re.VERBOSE)
 
     # Is not related to Websocket permissions.  Eg. might be a database permission.
     if not result:
@@ -96,7 +95,7 @@ def parsePermission(permissionString: str) -> Optional[Tuple[str, str]]:
 class RosbridgeWebSocket(WebSocketHandler):
     client_id_seed = 0
     clients_connected = 0
-    authenticate = False
+    require_authentication = False
     auth_service_name = None
     use_compression = False
 
@@ -123,7 +122,8 @@ class RosbridgeWebSocket(WebSocketHandler):
             self.protocol = RosbridgeProtocol(cls.client_id_seed, parameters=parameters)
             self.protocol.outgoing = self.send_message
             self.set_nodelay(True)
-            self.authenticated = False
+            self.is_authenticated = False
+            self.username = None
             self._write_lock = threading.RLock()
             cls.client_id_seed += 1
             cls.clients_connected += 1
@@ -159,7 +159,7 @@ class RosbridgeWebSocket(WebSocketHandler):
         msg = self.decode_message(message)
 
         if msg["op"] == "authenticate" or cls.require_authentication or self.is_authenticated:
-            self.on_message_with_auth(message)
+            self.on_message_with_auth(msg, message)
         else:
             self.protocol.incoming(message)
 
@@ -221,12 +221,18 @@ class RosbridgeWebSocket(WebSocketHandler):
         return {}
 
     def on_message_with_auth(self, msg, message):
+        """Handle an incoming message that requires auth workflows.
+
+        Parsing the message can be expensive. Given we've already parsed it, this method accepts both the parsed and
+        unparsed versions for usage/passthrough.
+        """
 
         if msg["op"] == "authenticate":
-            if self.is_authenticated:
-                self.send_status("Cannot call op `authenticate` when user is already authenticated.", "error")
-            else:
-                self.authenticate_user(msg)
+            self.authenticate_user(msg)
+            return
+
+        if not self.is_authenticated:
+            self.send_status(f"Client is not authenticated. Send `authenticate` op first.", "error")
             return
 
         op = msg["op"]
@@ -234,7 +240,7 @@ class RosbridgeWebSocket(WebSocketHandler):
 
         # Do not require any permissions to unsubscribe from something.
         if self.has_permission(op, resourcePath):
-            self.incoming_queue.push(message)  # push the non-decoded message data.
+            self.protocol.incoming(message)  # push the non-decoded message data.
         else:
             reason = f"{self.username} lacks permission to {op} to {resourcePath}"
             self.send_status(reason, "error")
@@ -257,7 +263,7 @@ class RosbridgeWebSocket(WebSocketHandler):
         else:
             raise ValueError("level must be info|warning|error.")
 
-        self.outgoing(msg)
+        self.protocol.outgoing(msg)
 
     def authenticate_user(self, msg):
         # Reset auth state regardless of user being authenticated or not. This means that repeated `authenticate` ops
@@ -275,6 +281,7 @@ class RosbridgeWebSocket(WebSocketHandler):
             self.send_status("Message is malformed. Must include `token`.", "error")
             return
 
+        rospy.loginfo(f"Calling {self.auth_service_name} to check auth for user...")
         response = auth_srv(msg["token"])
 
         # An internal error. Handle it locally and close the connection. This needs to be fixed, not handled.
@@ -304,13 +311,18 @@ class RosbridgeWebSocket(WebSocketHandler):
             self.username = response.username
 
             for p in response.permissions:
-                parsedPermission = parsePermission(p)
-                if parsedPermission is not None:
-                    self.permissions[parsedPermission[0]].add(parsedPermission[1])
+                parsed_permission = parse_permission(p)
+                if parsed_permission is not None:
+                    self.permissions[parsed_permission[0]].add(parsed_permission[1])
 
-            permissionsString = "".join(sorted([f"\n  - {p[0]}: {p[1]}" for p in self.permissions]))
-            rospy.loginfo(f"Authenticated user: {response.username} with permissions:{permissionsString}")
-            self.outgoing(message)
+            # Format a pleasant output of all permissions for user to console/logs.
+            permissions_string = ""
+            for action_name, resources in self.permissions.items():
+                permissions_string += f"\n{action_name}"
+                permissions_string += "".join(sorted([f"\n - {r}" for r in resources]))
+            rospy.loginfo(f"Authenticated user: {response.username} with permissions:{permissions_string}")
+
+        self.protocol.outgoing(message)
 
     def has_permission(self, op: str, resourcePath: str) -> bool:
         if op == "unsubscribe":
