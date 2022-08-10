@@ -14,7 +14,7 @@
 
   <arg name="use_compression" default="false" />
 
-  <arg name="authenticate" default="false" />
+  <arg name="require_authentication" default="false" />
 
   <arg name="topics_glob" default="[*]" />
   <arg name="services_glob" default="[*]" />
@@ -28,7 +28,7 @@
     <node name="rosbridge_websocket" pkg="rosbridge_server" type="rosbridge_websocket" output="screen">
       <param name="certfile" value="$(arg certfile)" />
       <param name="keyfile" value="$(arg keyfile)" />
-      <param name="authenticate" value="$(arg authenticate)" />
+      <param name="require_authentication" value="$(arg require_authentication)" />
       <param name="port" value="$(arg port)"/>
       <param name="address" value="$(arg address)"/>
       <param name="retry_startup_delay" value="$(arg retry_startup_delay)"/>
@@ -45,7 +45,7 @@
   </group>
   <group unless="$(arg ssl)">
     <node name="rosbridge_websocket" pkg="rosbridge_server" type="rosbridge_websocket" output="screen">
-      <param name="authenticate" value="$(arg authenticate)" />
+      <param name="require_authentication" value="$(arg require_authentication)" />
       <param name="port" value="$(arg port)"/>
       <param name="address" value="$(arg address)"/>
       <param name="retry_startup_delay" value="$(arg retry_startup_delay)"/>
