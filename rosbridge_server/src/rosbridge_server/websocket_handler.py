@@ -303,7 +303,6 @@ class RosbridgeWebSocket(WebSocketHandler):
                 {
                     "op": "authentication_response",
                     "username": response.username,
-                    "msg": "",
                     "permissions": response.permissions,
                 }
             )
