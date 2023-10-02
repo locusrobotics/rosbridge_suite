@@ -35,7 +35,12 @@ from functools import partial
 from rosbridge_library.capability import Capability
 from rosbridge_library.internal.services import ServiceCaller
 from rosbridge_library.util import string_types
+import logging
 
+try:
+    from cbor import dumps as encode_cbor
+except ImportError:
+    from rosbridge_library.util.cbor import dumps as encode_cbor
 
 class CallService(Capability):
 
@@ -99,6 +104,10 @@ class CallService(Capability):
         if cid is not None:
             outgoing_message["id"] = cid
         # TODO: fragmentation, compression
+        if compression == "cbor":
+            logging.info("requested compression {}".format(compression))
+            outgoing_message = bytearray(encode_cbor(outgoing_message))
+
         self.protocol.send(outgoing_message)
 
     def _failure(self, cid, service, exc):

@@ -1,5 +1,6 @@
 import struct
 import sys
+import logging
 
 PYTHON2 = sys.version_info < (3, 0)
 
@@ -23,6 +24,7 @@ BYTESTREAM_TYPES = ['uint8[]', 'char[]']
 TAGGED_ARRAY_FORMATS = {
     'uint16[]': (69, '<{}H'),
     'uint32[]': (70, '<{}I'),
+    'uint32[2]': (70, '<{}I'),    
     'uint64[]': (71, '<{}Q'),
     'byte[]': (72, '{}b'),
     'int8[]': (72, '{}b'),
@@ -48,6 +50,8 @@ def extract_cbor_values(msg):
         if PYTHON2:
             slot = unicode(slot)
 
+        logging.warn('Slot type is: ')
+        logging.warn(slot_type)
         # string
         if slot_type in STRING_TYPES:
             out[slot] = unicode(val) if PYTHON2 else str(val)
