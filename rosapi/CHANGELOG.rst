@@ -2,8 +2,8 @@
 Changelog for package rosapi
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.13.0 (2024-02-29)
+-------------------
 * rosapi hotdog python3
   My understading is that Hotdog should be exclusively Python3. The rosapi node is launched during Vector bringup, and as far as I've been able to test, the simple change proposed here is sufficient. Please DO NOT MERGE this, this is only meant to start a conversation, but further analysis is needed.
 * Contributors: nickovaras
