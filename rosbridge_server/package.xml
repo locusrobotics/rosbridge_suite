@@ -17,6 +17,7 @@
   <buildtool_depend>catkin</buildtool_depend>
 
   <build_depend>catkin_virtualenv</build_depend>
+  <build_depend>python3.10</build_depend>
 
   <!--exec_depend>python-backports.ssl-match-hostname</exec_depend-->
   <!-- <exec_depend>python-tornado</exec_depend> -->
