@@ -155,10 +155,12 @@ class OutgoingValve:
         reactor.callFromThread(self._proto.outgoing, message, compression=compression)
 
     def pauseProducing(self):
+        rospy.logwarn("Rosbridge outgoing valve closed. Pausing publishing new messages until buffer is empty. Value status: %s", str(self._finished))
         if not self._finished:
             self._valve.clear()
 
     def resumeProducing(self):
+        rospy.logwarn("Rosbridge outgoing valve open. Resuming publishing new messages.")
         self._valve.set()
 
     def stopProducing(self):
